@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Historical Timeline</title>
+    <style>
+        :root {
+            --primary-pink: #ec4899;
+            --primary-purple: #a855f7;
+            --primary-blue: #3b82f6;
+            --bg-dark: #060713;
+            --card-bg: rgba(20, 16, 46, 0.82); /* Translucent vibrant background blend */
+            --text-light: #f8fafc;
+            --text-muted: #cbd5e1;
+            --danger-red: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            user-select: none;
+            background-image: radial-gradient(circle at 50% 50%, #120f33 0%, #060713 100%);
+        }
+
+        /* Zoom Level HUD indicator */
+        .zoom-hud {
+            position: fixed;
+            bottom: 2rem;
+            left: 2rem;
+            background: var(--card-bg);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            z-index: 90;
+            pointer-events: none;
+        }
+
+        /* Floating Menu Control Hub */
+        .menu-controls {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            display: flex;
+            gap: 1rem;
+            z-index: 100;
+        }
+
+        .menu-trigger {
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary-pink), var(--primary-purple));
+            border: none;
+            border-radius: 25px;
+            color: white;
+            padding: 0 1.2rem;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 20px rgba(236, 72, 153, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.2s ease;
+        }
+        .menu-trigger:hover { transform: scale(1.05); }
+        .menu-trigger svg { width: 20px; height: 20px; fill: white; }
+
+        /* Modal Overlay Form */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(6, 7, 19, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .form-container {
+            width: 90%;
+            max-width: 500px;
+            background: rgba(20, 16, 46, 0.95);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            border: 1px solid rgba(236, 72, 153, 0.4);
+            position: relative;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1.2rem;
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .form-container h2 { margin-bottom: 1.5rem; font-size: 1.4rem; color: var(--text-light); }
+        .form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; margin-bottom: 1.2rem; flex: 1; }
+        .form-group label { margin-bottom: 0.4rem; font-weight: 600; color: var(--text-muted); font-size: 0.85rem; }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #4c1d95;
+            background: #060713;
+            color: white;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .form-group input:focus, .form-group textarea:focus { border-color: var(--primary-pink); }
+
+        .type-toggle {
+            display: flex;
+            background: #060713;
+            border-radius: 8px;
+            padding: 0.3rem;
+            margin-bottom: 1.2rem;
+            border: 2px solid #4c1d95;
+        }
+        .type-toggle button {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .type-toggle button.active {
+            background: linear-gradient(135deg, var(--primary-pink), var(--primary-purple));
+            color: white;
+        }
+
+        form button[type="submit"] {
+            background: linear-gradient(135deg, var(--primary-pink), var(--primary-purple));
+            color: white;
+            padding: 0.8rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+        }
+
+        /* --- TIMELINE VIEWPORT CONTAINER (Allows Vertical Scrolling) --- */
+        .timeline-viewport {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow-y: auto; 
+            overflow-x: hidden;
+        }
+
+        .timeline-viewport::-webkit-scrollbar { width: 8px; }
+        .timeline-viewport::-webkit-scrollbar-track { background: rgba(6, 7, 19, 0.5); }
+        .timeline-viewport::-webkit-scrollbar-thumb {
+            background: linear-gradient(var(--primary-pink), var(--primary-purple));
+            border-radius: 4px;
+        }
+
+        .timeline-container-wrapper {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: max-content;
+        }
+
+        .timeline-track {
+            position: absolute;
+            height: 4px; 
+            background: linear-gradient(to right, var(--primary-pink), var(--primary-purple));
+            border-radius: 2px;
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.5);
+            top: 50vh; 
+            z-index: 10; 
+        }
+
+        .gantt-rows {
+            position: absolute;
+            width: 100%;
+            height: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Inline Delete Triggers */
+        .delete-btn {
+            position: absolute;
+            top: 0.4rem;
+            right: 0.5rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 0.2rem;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s, color 0.2s;
+            z-index: 10;
+        }
+        .timeline-card:hover .delete-btn { opacity: 1; }
+        .delete-btn:hover { color: var(--danger-red); }
+
+        /* --- STYLING: Sleek Thin Period Tracking Bars --- */
+        .span-bar-track {
+            position: absolute;
+            height: 8px; 
+            border-radius: 4px;
+            background: linear-gradient(to right, var(--primary-blue), var(--primary-pink));
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 15; 
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .span-bar-track.highlighted, .span-bar-track:hover {
+            transform: scaleY(1.6);
+            background: linear-gradient(to right, #ffffff, var(--primary-pink));
+            box-shadow: 0 0 15px #ffffff, 0 0 25px var(--primary-pink);
+        }
+
+        /* --- COMMON CONTAINER: Core Layout Nodes --- */
+        .timeline-node {
+            position: absolute;
+            width: 250px;
+            pointer-events: none; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translate(-50%, 0);
+            z-index: 5;
+            transition: transform 0.2s ease;
+        }
+        
+        .timeline-node:hover, .timeline-node.highlighted {
+            z-index: 999999 !important;
+        }
+
+        .node-line {
+            width: 2px;
+            position: relative;
+            z-index: 1; 
+            transition: background 0.2s ease;
+        }
+        
+        /* Multiple-Year Events: lines go UPWARDS from event bar to text card */
+        .timeline-node.node-span .node-line {
+            /* Fixed: Shifted gradient start coordinate values to lock onto the top surface edge boundary */
+            background: linear-gradient(to top, var(--primary-blue) 0%, rgba(59, 130, 246, 0.05) 100%);
+            position: absolute;
+            bottom: 0;
+            transform: translateY(100%);
+        }
+        
+        /* Fixed: High intensity hover state syncing configuration rules */
+        .timeline-node.node-span:hover .node-line, .timeline-node.node-span.highlighted .node-line {
+            background: linear-gradient(to top, var(--primary-blue) 0%, var(--primary-pink) 100%);
+        }
+
+        /* Single-Day Events: lines drop DOWNWARDS from main track line to card */
+        .timeline-node.node-single .node-line {
+            background: linear-gradient(to bottom, var(--primary-pink) 0%, rgba(236, 72, 153, 0.05) 100%);
+        }
+        .timeline-node.node-single:hover .node-line, .timeline-node.node-single.highlighted .node-line {
+            background: linear-gradient(to bottom, var(--primary-pink) 0%, var(--primary-blue) 100%);
+        }
+
+        /* --- VIBRANT TEXT CARD: Translucent layered card frames --- */
+        .timeline-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px); 
+            border: 2px solid var(--primary-purple);
+            border-radius: 14px;
+            padding: 0.8rem 1.8rem 0.8rem 1rem;
+            text-align: center;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 0 15px rgba(168, 85, 247, 0.1);
+            position: relative;
+            pointer-events: auto; 
+            z-index: 20; 
+            transition: transform 0.2s ease, background 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .timeline-node:hover .timeline-card, .timeline-node.highlighted .timeline-card {
+            background: rgba(28, 18, 59, 0.9);
+            border-color: var(--primary-pink);
+            transform: scale(1.04);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(236, 72, 153, 0.4);
+        }
+
+        /* Typography Components */
+        .card-title { font-weight: 700; font-size: 0.95rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; margin-right: 0.2rem; }
+        .timeline-node:hover .card-title, .timeline-node.highlighted .card-title { white-space: normal; overflow: visible; text-overflow: clip; }
+        
+        .card-date { font-size: 0.75rem; color: #a7f3d0; font-weight: bold; margin-top: 0.1rem; white-space: nowrap; }
+        .card-span-date { font-size: 0.75rem; color: #93c5fd; font-weight: bold; margin-top: 0.1rem; white-space: nowrap; }
+
+        .description-tooltip {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            font-size: 0.85rem;
+            margin-top: 0rem;
+            transition: max-height 0.25s ease, opacity 0.25s ease, margin 0.25s ease;
+            line-height: 1.45;
+            color: var(--text-muted);
+            text-align: left;
+        }
+        .timeline-node:hover .description-tooltip, .timeline-node.highlighted .description-tooltip {
+            max-height: 180px;
+            opacity: 1;
+            margin-top: 0.6rem;
+            overflow-y: auto;
+        }
+
+        /* Axis Ticks Markers */
+        .axis-marker {
+            position: absolute;
+            transform: translateX(-50%);
+            color: #94a3b8;
+            font-size: 0.8rem;
+            font-weight: bold;
+            top: 25px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            z-index: 12; 
+        }
+        .axis-marker::before {
+            content: '';
+            width: 2px;
+            height: 12px; 
+            background: rgba(168, 85, 247, 0.6);
+            margin-bottom: 4px;
+            box-shadow: 0 0 8px var(--primary-purple);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="zoom-hud" id="zoomHud">Zoom Scale: 100%</div>
+
+    <div class="menu-controls">
+        <button class="menu-trigger" id="openBulkBtn">
+            <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:white;"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+            Bulk Insertion
+        </button>
+        <button class="menu-trigger" id="openMenuBtn">
+            <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:white;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add Event
+        </button>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="form-container">
+            <button class="close-btn" id="closeMenuBtn">&times;</button>
+            <h2>Log Historical Marker</h2>
+            
+            <div class="type-toggle">
+                <button type="button" id="typeSingle" class="active">Single Event</button>
+                <button type="button" id="typeSpan">Time Period Spanning</button>
+            </div>
+
+            <form id="timelineForm">
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1.5;">
+                        <label id="dateLabel">Event Date</label>
+                        <input type="number" id="startDay" min="1" max="31" placeholder="Day">
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                        <select id="startMonth">
+                            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+                            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+                            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+                            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                        <input type="number" id="startYear" placeholder="Year" required>
+                    </div>
+                    <div class="form-group" style="flex: 1.5;">
+                        <select id="startEra">
+                            <option value="BCE">BCE</option><option value="CE" selected>CE</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row" id="endDateRow" style="display: none;">
+                    <div class="form-group" style="flex: 1.5;">
+                        <label>End Date</label>
+                        <input type="number" id="endDay" min="1" max="31" placeholder="Day">
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                        <select id="endMonth">
+                            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+                            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+                            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+                            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 2;">
+                        <input type="number" id="endYear" placeholder="Year">
+                    </div>
+                    <div class="form-group" style="flex: 1.5;">
+                        <select id="endEra">
+                            <option value="BCE">BCE</option><option value="CE" selected>CE</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="eventTitle">Event Title</label>
+                    <input type="text" id="eventTitle" placeholder="e.g., Library of Alexandria Burning" required>
+                </div>
+                <div class="form-group">
+                    <label for="eventDesc">Historical Context</label>
+                    <textarea id="eventDesc" rows="2" placeholder="Record context and intersections..." required></textarea>
+                </div>
+                <button type="submit">Commit to History</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="bulkOverlay">
+        <div class="form-container">
+            <button class="close-btn" id="closeBulkBtn">&times;</button>
+            <h2>Bulk Timeline Input</h2>
+            <p style="font-size:0.8rem; margin-bottom: 1rem; color: var(--text-muted);">
+                Paste an array of event objects structured as standard valid JSON.
+            </p>
+            <form id="bulkForm">
+                <div class="form-group">
+                    <textarea id="bulkJsonInput" style="font-family: monospace; font-size:0.8rem;" rows="10" placeholder='[
+  {
+    "title": "Fall of Constantinople",
+    "desc": "Marked the end of the Byzantine Empire.",
+    "sDay": 29, "sMonth": 5, "sYear": 1453, "isSpan": false
+  }
+]' required></textarea>
+                </div>
+                <button type="submit">Execute Bulk Transaction</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="timeline-viewport" id="viewport">
+        <div class="timeline-container-wrapper" id="containerWrapper">
+            <div class="timeline-track" id="timelineTrack">
+                <div class="gantt-rows" id="gantRows"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api/events';
+        let events = [];
+
+        let basePixelsPerYear = 15;   
+        let zoomScale = 1.0;          
+        let targetX = 0;             
+        let currentX = 0;            
+        let velocityX = 0;           
+        let edgeSpeedFactor = 0; 
+        let currentFormType = 'single'; 
+
+        // Boundary parameters
+        let trackWidth = 2000;
+        let timelineMinDecYear = 0;
+        let timelineMaxDecYear = 0;
+
+        // Unified global active tracking register variable to make card hover transitions instant
+        let currentActiveId = null;
+        let clearHighlightTimeout = null;
+
+        const track = document.getElementById('timelineTrack');
+        const containerWrapper = document.getElementById('containerWrapper');
+        const ganttRows = document.getElementById('gantRows');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const bulkOverlay = document.getElementById('bulkOverlay');
+        const form = document.getElementById('timelineForm');
+        const bulkForm = document.getElementById('bulkForm');
+        const zoomHud = document.getElementById('zoomHud');
+        const viewport = document.getElementById('viewport');
+
+        // Modal Controls
+        document.getElementById('openMenuBtn').addEventListener('click', () => modalOverlay.classList.add('active'));
+        document.getElementById('closeMenuBtn').addEventListener('click', () => modalOverlay.classList.remove('active'));
+        document.getElementById('openBulkBtn').addEventListener('click', () => bulkOverlay.classList.add('active'));
+        document.getElementById('closeBulkBtn').addEventListener('click', () => bulkOverlay.classList.remove('active'));
+
+        const btnSingle = document.getElementById('typeSingle');
+        const btnSpan = document.getElementById('typeSpan');
+        const endDateRow = document.getElementById('endDateRow');
+        const dateLabel = document.getElementById('dateLabel');
+
+        btnSingle.addEventListener('click', () => {
+            currentFormType = 'single';
+            btnSingle.classList.add('active'); btnSpan.classList.remove('active');
+            endDateRow.style.display = 'none'; dateLabel.innerText = "Event Date";
+            document.getElementById('endYear').removeAttribute('required');
+        });
+        btnSpan.addEventListener('click', () => {
+            currentFormType = 'span';
+            btnSpan.classList.add('active'); btnSingle.classList.remove('active');
+            endDateRow.style.display = 'flex'; dateLabel.innerText = "Start Date";
+            document.getElementById('endYear').setAttribute('required', 'true');
+        });
+
+        // Pull events array from Node.js Database API
+        async function fetchEventsFromDatabase() {
+            try {
+                const response = await fetch(API_URL);
+                events = await response.json();
+                renderTimelineStructure();
+                clampTargetPosition();
+                currentX = targetX;
+            } catch (error) {
+                console.error("Error communicating with database API:", error);
+            }
+        }
+
+        async function deleteEvent(id) {
+            try {
+                const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                if (response.ok) fetchEventsFromDatabase();
+            } catch (error) {
+                console.error("Failed to delete item from database:", error);
+            }
+        }
+
+        // Single Entry Form Submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const sDay = parseInt(document.getElementById('startDay').value) || 1;
+            const sMonth = parseInt(document.getElementById('startMonth').value);
+            const sYearRaw = parseInt(document.getElementById('startYear').value);
+            const sEra = document.getElementById('startEra').value;
+            const sYear = sEra === 'BCE' ? -Math.abs(sYearRaw) : Math.abs(sYearRaw);
+
+            let eDay = sDay, eMonth = sMonth, eYear = sYear, eEra = sEra;
+
+            if (currentFormType === 'span') {
+                eDay = parseInt(document.getElementById('endDay').value) || 1;
+                eMonth = parseInt(document.getElementById('endMonth').value);
+                const eYearRaw = parseInt(document.getElementById('endYear').value);
+                eEra = document.getElementById('endEra').value;
+                eYear = eEra === 'BCE' ? -Math.abs(eYearRaw) : Math.abs(eYearRaw);
+            }
+
+            const payload = {
+                sDay, sMonth, sYear,
+                eDay, eMonth, eYear,
+                isSpan: (currentFormType === 'span'),
+                title: document.getElementById('eventTitle').value,
+                desc: document.getElementById('eventDesc').value
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    form.reset();
+                    modalOverlay.classList.remove('active');
+                    fetchEventsFromDatabase();
+                }
+            } catch (error) {
+                console.error("Save operational request rejected:", error);
+            }
+        });
+
+        // Bulk Insertion Form Submission
+        bulkForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const jsonText = document.getElementById('bulkJsonInput').value;
+            let parsedData;
+
+            try {
+                parsedData = JSON.parse(jsonText);
+            } catch (err) {
+                alert("Invalid JSON configuration layout. Please check brackets and commas.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/bulk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parsedData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(`Successfully imported ${result.count} bulk entries into SQLite!`);
+                    bulkForm.reset();
+                    bulkOverlay.classList.remove('active');
+                    fetchEventsFromDatabase();
+                } else {
+                    alert(`Server rejection error: ${result.error}`);
+                }
+            } catch (error) {
+                console.error("Bulk submission operation rejected:", error);
+            }
+        });
+
+        function getDecimalYear(day, month, year) {
+            const y = parseInt(year);
+            const d = parseInt(day) || 1;
+            const m = parseInt(month) || 1;
+            const dayOffset = ((m - 1) * 30.4) + d; 
+            const yearFraction = dayOffset / 365.25;
+            return y >= 0 ? y + yearFraction : y + (1 - yearFraction);
+        }
+
+        function setElementHighlight(eventId, shouldHighlight) {
+            if (shouldHighlight) {
+                if (clearHighlightTimeout) clearTimeout(clearHighlightTimeout);
+                if (currentActiveId && currentActiveId !== eventId) {
+                    document.querySelectorAll(`.node-id-${currentActiveId}`).forEach(el => el.classList.remove('highlighted'));
+                }
+                currentActiveId = eventId;
+                document.querySelectorAll(`.node-id-${eventId}`).forEach(el => el.classList.add('highlighted'));
+            } else {
+                if (currentActiveId === eventId) {
+                    clearHighlightTimeout = setTimeout(() => {
+                        document.querySelectorAll(`.node-id-${eventId}`).forEach(el => el.classList.remove('highlighted'));
+                        currentActiveId = null;
+                    }, 15);
+                }
+            }
+        }
+
+        function renderTimelineStructure() {
+            ganttRows.innerHTML = '';
+            document.querySelectorAll('.axis-marker').forEach(el => el.remove());
+
+            if (events.length === 0) {
+                trackWidth = 2000;
+                track.style.width = `${trackWidth}px`;
+                timelineMinDecYear = 0;
+                timelineMaxDecYear = 0;
+                return;
+            }
+
+            const activePPS = basePixelsPerYear * zoomScale; 
+
+            const processedEvents = events.map(e => ({
+                ...e,
+                startDec: getDecimalYear(e.sDay, e.sMonth, e.sYear),
+                endDec: getDecimalYear(e.eDay, e.eMonth, e.eYear)
+            }));
+
+            const allDecs = processedEvents.flatMap(e => [e.startDec, e.endDec]);
+            
+            const pad = 150 / zoomScale; 
+            timelineMinDecYear = Math.floor(Math.min(...allDecs) - pad);
+            timelineMaxDecYear = Math.ceil(Math.max(...allDecs) + pad);
+
+            trackWidth = (timelineMaxDecYear - timelineMinDecYear) * activePPS;
+            track.style.width = `${trackWidth}px`;
+            containerWrapper.style.width = `${trackWidth}px`;
+
+            let tickInterval = 100;
+            if (zoomScale > 4.0) tickInterval = 10;
+            if (zoomScale > 15.0) tickInterval = 1;
+            if (zoomScale < 0.4) tickInterval = 500;
+            if (zoomScale < 0.1) tickInterval = 1000;
+
+            const startTick = Math.ceil(timelineMinDecYear / tickInterval) * tickInterval;
+            for (let y = startTick; y <= timelineMaxDecYear; y += tickInterval) {
+                if (y === 0) continue;
+                const marker = document.createElement('div');
+                marker.className = 'axis-marker';
+                marker.style.left = `${(y - timelineMinDecYear) * activePPS}px`;
+                marker.innerHTML = y < 0 ? `${Math.abs(y)} BCE` : `${y} CE`;
+                track.appendChild(marker);
+            }
+
+            let barTrackRows = [];
+            let spanCardRows = [];
+            let singleCardRows = [];
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+            processedEvents.sort((a,b) => a.startDec - b.startDec).forEach((event) => {
+                const leftPos = (event.startDec - timelineMinDecYear) * activePPS;
+                const startStr = `${event.sDay} ${months[event.sMonth-1]} ${Math.abs(event.sYear)} ${event.sYear < 0 ? 'BCE' : 'CE'}`;
+                const cardWidthBoundary = 270;
+                const bufferYears = cardWidthBoundary / activePPS;
+
+                if (event.isSpan) {
+                    // --- PERIOD MULTIPLE-YEAR EVENTS: STACK CLEANLY UPWARDS ---
+                    let barRow = 0;
+                    while (barTrackRows[barRow] && barTrackRows[barRow].some(assigned => {
+                        return (event.startDec < assigned.endDec && event.endDec > assigned.startDec);
+                    })) {
+                        barRow++;
+                    }
+                    if (!barTrackRows[barRow]) barTrackRows[barRow] = [];
+                    barTrackRows[barRow].push(event);
+
+                    const barWidth = (event.endDec - event.startDec) * activePPS;
+                    const barEl = document.createElement('div');
+                    barEl.className = `span-bar-track node-id-${event.id}`;
+                    barEl.id = `bar-track-${event.id}`;
+                    barEl.style.left = `${leftPos}px`;
+                    barEl.style.width = `${barWidth}px`;
+                    barEl.style.bottom = `${(barRow * 15) + 8}px`; 
+                    ganttRows.appendChild(barEl);
+
+                    let cardRow = 0;
+                    while (spanCardRows[cardRow] && spanCardRows[cardRow].some(assigned => {
+                        const assignedVisualEnd = Math.max(assigned.endDec, assigned.startDec + bufferYears);
+                        const currentVisualEnd = Math.max(event.endDec, event.startDec + bufferYears);
+                        return (event.startDec < assignedVisualEnd && currentVisualEnd > assigned.startDec);
+                    })) {
+                        cardRow++;
+                    }
+                    if (!spanCardRows[cardRow]) spanCardRows[cardRow] = [];
+                    spanCardRows[cardRow].push(event);
+
+                    const endStr = `${event.eDay} ${months[event.eMonth-1]} ${Math.abs(event.eYear)} ${event.eYear < 0 ? 'BCE' : 'CE'}`;
+                    const node = document.createElement('div');
+                    node.className = `timeline-node node-span node-id-${event.id}`;
+                    node.style.left = `${leftPos + (barWidth / 2)}px`; 
+                    
+                    // Fixed: Factored the exact dynamic bar track coordinate layout matrix height (plus the bar track's 8px thickness block) 
+                    // to force the stem endpoint line to terminate directly flush on the top surface of the horizontal bar track range.
+                    const currentBarHeightOffset = (barRow * 15) + 8 + 8;
+                    const customLineHeight = 45 + (cardRow * 42); 
+                    node.style.bottom = `${currentBarHeightOffset + customLineHeight}px`;
+                    node.style.zIndex = `${100 - cardRow}`;
+
+                    node.innerHTML = `
+                        <div class="timeline-card">
+                            <button class="delete-btn" onclick="deleteEvent(${event.id})">&times;</button>
+                            <div class="card-title">${event.title}</div>
+                            <div class="card-span-date">${startStr} – ${endStr}</div>
+                            <div class="description-tooltip">${event.desc}</div>
+                        </div>
+                        <div class="node-line" style="height: ${customLineHeight}px;"></div>
+                    `;
+
+                    const onEnter = () => { setElementHighlight(event.id, true); };
+                    const onLeave = () => { setElementHighlight(event.id, false); };
+
+                    barEl.addEventListener('mouseenter', onEnter);
+                    barEl.addEventListener('mouseleave', onLeave);
+                    node.addEventListener('mouseenter', onEnter);
+                    node.addEventListener('mouseleave', onLeave);
+
+                    ganttRows.appendChild(node);
+
+                } else {
+                    // --- SINGLE POINT EVENTS: DROP MARKERS DOWNWARDS ---
+                    let cardRow = 0;
+                    while (singleCardRows[cardRow] && singleCardRows[cardRow].some(assigned => {
+                        return (event.startDec < (assigned.startDec + bufferYears) && (assigned.startDec + bufferYears) > assigned.startDec);
+                    })) {
+                        cardRow++;
+                    }
+                    if (!singleCardRows[cardRow]) singleCardRows[cardRow] = [];
+                    singleCardRows[cardRow].push(event);
+
+                    const node = document.createElement('div');
+                    node.className = `timeline-node node-single node-id-${event.id}`;
+                    node.style.left = `${leftPos}px`;
+                    node.style.top = `0px`; 
+                    node.style.zIndex = `${100 - cardRow}`;
+
+                    const customLineHeight = 80 + (cardRow * 105);
+
+                    node.innerHTML = `
+                        <div class="node-line" style="height: ${customLineHeight}px;"></div>
+                        <div class="timeline-card">
+                            <button class="delete-btn" onclick="deleteEvent(${event.id})">&times;</button>
+                            <div class="card-title">${event.title}</div>
+                            <div class="card-date">${startStr}</div>
+                            <div class="description-tooltip">${event.desc}</div>
+                        </div>
+                    `;
+
+                    node.addEventListener('mouseenter', () => { setElementHighlight(event.id, true); });
+                    node.addEventListener('mouseleave', () => { setElementHighlight(event.id, false); });
+
+                    ganttRows.appendChild(node);
+                }
+            });
+
+            const maxTopRow = Math.max(spanCardRows.length * 42 + 130, 250);
+            const maxBottomRow = Math.max(singleCardRows.length * 105 + 240, 300);
+            const calculatedMaxHeightSide = Math.max(maxTopRow, maxBottomRow);
+            const calculatedTotalHeight = calculatedMaxHeightSide * 2 + 100;
+            
+            track.style.top = `${calculatedMaxHeightSide}px`;
+            containerWrapper.style.height = `${calculatedTotalHeight}px`;
+
+            track.dataset.minYear = timelineMinDecYear;
+        }
+
+        function clampTargetPosition() {
+            const screenWidth = window.innerWidth;
+            if (trackWidth <= screenWidth) {
+                targetX = (screenWidth - trackWidth) / 2;
+            } else {
+                const minPan = screenWidth - trackWidth;
+                const maxPan = 0;
+                targetX = Math.max(minPan, Math.min(targetX, maxPan));
+            }
+        }
+
+        function getMinimumZoomScale() {
+            if (events.length === 0) return 0.05;
+            const processedEvents = events.map(e => ({
+                startDec: getDecimalYear(e.sDay, e.sMonth, e.sYear),
+                endDec: getDecimalYear(e.eDay, e.eMonth, e.eYear)
+            }));
+            const allDecs = processedEvents.flatMap(e => [e.startDec, e.endDec]);
+            const spanYears = Math.ceil(Math.max(...allDecs) - Math.min(...allDecs)) + 300; 
+            const neededZoom = window.innerWidth / (spanYears * basePixelsPerYear);
+            return Math.min(1.0, Math.max(0.005, neededZoom));
+        }
+
+        window.addEventListener('wheel', (e) => {
+            if (modalOverlay.classList.contains('active') || bulkOverlay.classList.contains('active')) return;
+
+            if (!e.ctrlKey) {
+                viewport.scrollTop += e.deltaY;
+                return; 
+            }
+
+            e.preventDefault();
+
+            const activePPS = basePixelsPerYear * zoomScale;
+            const minYear = parseFloat(track.dataset.minYear) || 0;
+            const centerYearBefore = minYear + ((window.innerWidth / 2 - currentX) / activePPS);
+
+            const zoomSpeed = 0.08;
+            let nextScale = zoomScale;
+            if (e.deltaY < 0) {
+                nextScale *= (1 + zoomSpeed); 
+            } else {
+                nextScale /= (1 + zoomSpeed); 
+            }
+            
+            const minAllowedZoom = getMinimumZoomScale();
+            nextScale = Math.max(minAllowedZoom, Math.min(nextScale, 45.0)); 
+
+            if (nextScale !== zoomScale) {
+                zoomScale = nextScale;
+                zoomHud.innerText = `Zoom Scale: ${Math.round(zoomScale * 100)}%`;
+
+                renderTimelineStructure();
+
+                const newActivePPS = basePixelsPerYear * zoomScale;
+                const newMinYear = parseFloat(track.dataset.minYear) || 0;
+                targetX = (window.innerWidth / 2) - ((centerYearBefore - newMinYear) * newActivePPS);
+                
+                clampTargetPosition();
+                currentX = targetX; 
+            }
+        }, { passive: false });
+
+        window.addEventListener('mousemove', (e) => {
+            const screenWidth = window.innerWidth;
+            const cursorX = e.clientX;
+            const marginThreshold = screenWidth * 0.15; 
+
+            if (cursorX < marginThreshold) {
+                edgeSpeedFactor = -1 * (1 - (cursorX / marginThreshold));
+            } else if (cursorX > (screenWidth - marginThreshold)) {
+                const distanceIntoRightMargin = cursorX - (screenWidth - marginThreshold);
+                edgeSpeedFactor = (distanceIntoRightMargin / marginThreshold);
+            } else {
+                edgeSpeedFactor = 0;
+            }
+        });
+
+        function updateSmoothPan() {
+            if (!modalOverlay.classList.contains('active') && !bulkOverlay.classList.contains('active') && edgeSpeedFactor !== 0) {
+                const maxPanVelocity = 16; 
+                velocityX += (edgeSpeedFactor * maxPanVelocity - velocityX) * 0.04;
+                targetX -= velocityX;
+                clampTargetPosition();
+            } else {
+                velocityX *= 0.80;
+            }
+
+            const prevTarget = targetX;
+            clampTargetPosition();
+            if (prevTarget !== targetX) {
+                currentX = targetX;
+                velocityX = 0;
+            } else {
+                currentX += (targetX - currentX) * 0.04;
+            }
+            
+            containerWrapper.style.transform = `translateX(${currentX}px)`;
+            requestAnimationFrame(updateSmoothPan);
+        }
+
+        // Fetch initialization variables from SQLite
+        fetchEventsFromDatabase();
+        
+        setTimeout(() => {
+            const initialPPS = basePixelsPerYear * zoomScale;
+            targetX = -((0 - parseFloat(track.dataset.minYear)) * initialPPS) + (window.innerWidth / 2);
+            clampTargetPosition();
+            currentX = targetX;
+            requestAnimationFrame(updateSmoothPan);
+        }, 400);
+    </script>
+</body>
+</html>
